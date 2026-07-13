@@ -16,7 +16,7 @@ export function LeadScoreCard({
   const tier = TIER_COPY[output.tier];
 
   return (
-    <div className="lead-score-card">
+    <div className="lead-score-card" role="region" aria-label="scoreLead result">
       <div className="lead-score-card__header">
         <div>
           <p className="lead-score-card__eyebrow">scoreLead result</p>
@@ -46,7 +46,7 @@ export function LeadScoreCard({
         <div className="lead-score-card__meta">
           {typeof input?.budget === "number" ? (
             <p className="lead-score-card__budget">
-              Budget: <strong>${input.budget.toLocaleString()}</strong>
+              Budget: <strong>${input.budget.toLocaleString("en-US")}</strong>
             </p>
           ) : null}
           <p className="lead-score-card__score-label">Score out of 100</p>

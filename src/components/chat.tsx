@@ -4,14 +4,18 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { LeadScoreCard } from "@/components/lead-score-card";
 import type { ScoreLeadOutput } from "@/lib/tools/score-lead";
 
-type ChatRole = "user" | "assistant";
+export type ChatRole = "user" | "assistant";
 
-type ToolState = "input-streaming" | "input-available" | "output-available" | "output-error";
+export type ToolState =
+  | "input-streaming"
+  | "input-available"
+  | "output-available"
+  | "output-error";
 
-type TextPart = { kind: "text"; text: string };
-type NoResultPart = { kind: "no-result" };
+export type TextPart = { kind: "text"; text: string };
+export type NoResultPart = { kind: "no-result" };
 
-type ToolPart = {
+export type ToolPart = {
   kind: "tool";
   toolCallId: string;
   toolName: string;
@@ -22,9 +26,9 @@ type ToolPart = {
   errorText?: string;
 };
 
-type MessagePart = TextPart | ToolPart | NoResultPart;
+export type MessagePart = TextPart | ToolPart | NoResultPart;
 
-type ChatMessage = {
+export type ChatMessage = {
   id: string;
   role: ChatRole;
   parts: MessagePart[];
@@ -250,7 +254,7 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
 
   if (part.state === "output-error") {
     return (
-      <div className="tool-card tool-card--error">
+      <div className="tool-card tool-card--error" role="alert">
         <div className="tool-card__header">
           <span className="tool-card__icon" aria-hidden="true">
             ⚠
@@ -267,7 +271,7 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
 
   if (part.state === "input-available") {
     return (
-      <div className="tool-card tool-card--running">
+      <div className="tool-card tool-card--running" role="status" aria-label="scoreLead running">
         <div className="tool-card__header">
           <span className="tool-card__spinner" aria-hidden="true" />
           <div>
@@ -281,7 +285,9 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
             <span className="tool-chip">{String(part.input.company)}</span>
           ) : null}
           {typeof part.input?.budget === "number" ? (
-            <span className="tool-chip">${Number(part.input.budget).toLocaleString()}</span>
+            <span className="tool-chip">
+              ${Number(part.input.budget).toLocaleString("en-US")}
+            </span>
           ) : null}
         </div>
       </div>
@@ -290,7 +296,11 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
 
   // input-streaming
   return (
-    <div className="tool-card tool-card--building">
+    <div
+      className="tool-card tool-card--building"
+      role="status"
+      aria-label="scoreLead arguments streaming"
+    >
       <div className="tool-card__header">
         <span className="tool-card__spinner" aria-hidden="true" />
         <div>
@@ -300,6 +310,44 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
       </div>
       <pre className="tool-card__json">{part.inputText || "{"}</pre>
     </div>
+  );
+}
+
+export function ChatMessageView({ message }: { message: ChatMessage }) {
+  const label = message.role === "user" ? "User message" : "Assistant message";
+
+  return (
+    <article
+      aria-label={label}
+      className={`message message--${message.role} ${
+        message.streaming ? "message--thinking" : ""
+      }`}
+    >
+      <div className="message-meta">
+        <span>{message.role === "user" ? "You" : "Assistant"}</span>
+        {message.streaming ? <span className="badge">live</span> : null}
+      </div>
+
+      {message.streaming && message.parts.length === 0 ? (
+        <FirstResponseSkeleton />
+      ) : (
+        <div className="message-parts">
+          {message.parts.map((part, index) =>
+            part.kind === "text" ? (
+              part.text.trim().length > 0 ? (
+                <p key={index} className="message-body">
+                  {part.text}
+                </p>
+              ) : null
+            ) : part.kind === "no-result" ? (
+              <NoResultCard key={index} />
+            ) : (
+              <ToolLifecycleCard key={part.toolCallId} part={part} />
+            ),
+          )}
+        </div>
+      )}
+    </article>
   );
 }
 
@@ -675,41 +723,11 @@ export function Chat() {
             aria-label="Conversation transcript"
           >
             {messages.map((message) => (
-              <article
-                key={message.id}
-                className={`message message--${message.role} ${
-                  message.streaming ? "message--thinking" : ""
-                }`}
-              >
-                <div className="message-meta">
-                  <span>{message.role === "user" ? "You" : "Assistant"}</span>
-                  {message.streaming ? <span className="badge">live</span> : null}
-                </div>
-
-                {message.streaming && message.parts.length === 0 ? (
-                  <FirstResponseSkeleton />
-                ) : (
-                  <div className="message-parts">
-                    {message.parts.map((part, index) =>
-                      part.kind === "text" ? (
-                        part.text.trim().length > 0 ? (
-                          <p key={index} className="message-body">
-                            {part.text}
-                          </p>
-                        ) : null
-                      ) : part.kind === "no-result" ? (
-                        <NoResultCard key={index} />
-                      ) : (
-                        <ToolLifecycleCard key={part.toolCallId} part={part} />
-                      ),
-                    )}
-                  </div>
-                )}
-              </article>
+              <ChatMessageView key={message.id} message={message} />
             ))}
           </div>
 
-          <form className="composer" onSubmit={handleSubmit}>
+          <form className="composer" aria-label="Chat composer" onSubmit={handleSubmit}>
             <label htmlFor="message">
               Message
               <span className="composer-help">
