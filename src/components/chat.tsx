@@ -9,6 +9,7 @@ type ChatRole = "user" | "assistant";
 type ToolState = "input-streaming" | "input-available" | "output-available" | "output-error";
 
 type TextPart = { kind: "text"; text: string };
+type NoResultPart = { kind: "no-result" };
 
 type ToolPart = {
   kind: "tool";
@@ -21,7 +22,7 @@ type ToolPart = {
   errorText?: string;
 };
 
-type MessagePart = TextPart | ToolPart;
+type MessagePart = TextPart | ToolPart | NoResultPart;
 
 type ChatMessage = {
   id: string;
@@ -53,6 +54,12 @@ const starterMessages: ChatMessage[] = [
     ],
   },
 ];
+
+type ChatFailure = {
+  title: string;
+  message: string;
+  retryPrompt?: string;
+};
 
 function createId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -178,6 +185,64 @@ function updateToolPart(
   });
 }
 
+function hasVisiblePart(parts: MessagePart[]) {
+  return parts.some((part) => {
+    if (part.kind === "text") return part.text.trim().length > 0;
+    if (part.kind === "tool") return part.state === "output-available" || part.state === "output-error";
+    return true;
+  });
+}
+
+function NoResultCard() {
+  return (
+    <div className="state-card state-card--empty">
+      <p className="state-card__title">No result came back</p>
+      <p className="state-card__body">
+        Try asking for a shorter answer or score a sample lead to confirm the tool path.
+      </p>
+    </div>
+  );
+}
+
+function ChatErrorCard({
+  failure,
+  onRetry,
+  retryDisabled,
+}: {
+  failure: ChatFailure;
+  onRetry: () => void;
+  retryDisabled: boolean;
+}) {
+  return (
+    <div className="state-card state-card--error" role="alert">
+      <div>
+        <p className="state-card__title">{failure.title}</p>
+        <p className="state-card__body">{failure.message}</p>
+      </div>
+      {failure.retryPrompt ? (
+        <button
+          type="button"
+          className="button button-primary retry-button"
+          onClick={onRetry}
+          disabled={retryDisabled}
+        >
+          Retry
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function FirstResponseSkeleton() {
+  return (
+    <div className="skeleton-card" aria-label="Waiting for first response">
+      <span className="skeleton-line skeleton-line--wide" />
+      <span className="skeleton-line" />
+      <span className="skeleton-line skeleton-line--short" />
+    </div>
+  );
+}
+
 function ToolLifecycleCard({ part }: { part: ToolPart }) {
   if (part.state === "output-available" && part.output) {
     return <LeadScoreCard input={part.input} output={part.output} />;
@@ -242,12 +307,14 @@ export function Chat() {
   const [messages, setMessages] = useState<ChatMessage[]>(starterMessages);
   const [draft, setDraft] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ChatFailure | null>(null);
+  const [draftHint, setDraftHint] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "thinking" | "streaming">("idle");
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const isAtBottomRef = useRef(true);
   const abortRef = useRef<AbortController | null>(null);
   const activeAssistantIdRef = useRef<string | null>(null);
+  const lastUserPromptRef = useRef<string | null>(null);
 
   const conversationCount = useMemo(
     () => messages.filter((message) => message.role === "user").length,
@@ -369,9 +436,14 @@ export function Chat() {
       setIsStreaming(false);
       setStatus("idle");
       setMessages((current) =>
-        current.map((message) =>
-          message.id === assistantId ? { ...message, streaming: false } : message,
-        ),
+        current.map((message) => {
+          if (message.id !== assistantId) return message;
+          return {
+            ...message,
+            parts: hasVisiblePart(message.parts) ? message.parts : [{ kind: "no-result" }],
+            streaming: false,
+          };
+        }),
       );
       activeAssistantIdRef.current = null;
       abortRef.current = null;
@@ -379,15 +451,18 @@ export function Chat() {
     }
 
     if (event.type === "error") {
-      setError(event.message);
+      setFailure({
+        title: "Chat failed",
+        message: event.message,
+        retryPrompt: lastUserPromptRef.current ?? undefined,
+      });
       setIsStreaming(false);
       setStatus("idle");
       setMessages((current) =>
         current.map((message) => {
           if (message.id !== assistantId) return message;
           const parts = [...message.parts];
-          const hasText = parts.some((p) => p.kind === "text");
-          if (!hasText) parts.push({ kind: "text", text: event.message });
+          if (!hasVisiblePart(parts)) parts.push({ kind: "no-result" });
           return { ...message, parts, streaming: false };
         }),
       );
@@ -407,16 +482,19 @@ export function Chat() {
     );
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const sendMessage = useCallback(async (prompt: string, options?: { keepDraft?: boolean }) => {
+    const trimmed = prompt.trim();
+    if (!trimmed || isStreaming) {
+      if (!trimmed) setDraftHint("Type a message before sending.");
+      return;
+    }
 
-    const trimmed = draft.trim();
-    if (!trimmed || isStreaming) return;
-
-    setError(null);
-    setDraft("");
+    setFailure(null);
+    setDraftHint(null);
+    if (!options?.keepDraft) setDraft("");
     setIsStreaming(true);
     setStatus("thinking");
+    lastUserPromptRef.current = trimmed;
 
     const userMessage: ChatMessage = {
       id: createId("user"),
@@ -451,7 +529,12 @@ export function Chat() {
       });
 
       if (!response.ok || !response.body) {
-        throw new Error("The chat route did not return a usable stream.");
+        const detail = await response.json().catch(() => null);
+        const routeMessage =
+          detail && typeof detail.error === "string"
+            ? detail.error
+            : "The chat route did not return a usable stream.";
+        throw new Error(routeMessage);
       }
 
       setStatus("streaming");
@@ -464,19 +547,37 @@ export function Chat() {
       }
 
       const message = thrown instanceof Error ? thrown.message : "Something interrupted the stream.";
-      setError(message);
+      setFailure({
+        title: "Chat failed",
+        message,
+        retryPrompt: trimmed,
+      });
       setStatus("idle");
       setIsStreaming(false);
       setMessages((current) =>
         current.map((item) =>
           item.id === activeAssistantIdRef.current
-            ? { ...item, parts: [...item.parts, { kind: "text", text: message }], streaming: false }
+            ? {
+                ...item,
+                parts: hasVisiblePart(item.parts) ? item.parts : [{ kind: "no-result" }],
+                streaming: false,
+              }
             : item,
         ),
       );
       activeAssistantIdRef.current = null;
       abortRef.current = null;
     }
+  }, [isStreaming, messages, applyStreamEvent]);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await sendMessage(draft);
+  };
+
+  const retryLastMessage = () => {
+    const prompt = failure?.retryPrompt ?? lastUserPromptRef.current;
+    if (prompt) void sendMessage(prompt, { keepDraft: true });
   };
 
   return (
@@ -559,7 +660,13 @@ export function Chat() {
             </div>
           </header>
 
-          {error ? <div className="error-banner">{error}</div> : null}
+          {failure ? (
+            <ChatErrorCard
+              failure={failure}
+              onRetry={retryLastMessage}
+              retryDisabled={isStreaming}
+            />
+          ) : null}
 
           <div
             className="transcript"
@@ -580,14 +687,7 @@ export function Chat() {
                 </div>
 
                 {message.streaming && message.parts.length === 0 ? (
-                  <div className="thinking-rows" aria-label="Assistant is typing">
-                    <div className="thinking-row">
-                      <span className="thinking-dot" />
-                      <span className="thinking-dot" />
-                      <span className="thinking-dot" />
-                    </div>
-                    <span className="stream-hint">Claude is preparing the first tokens.</span>
-                  </div>
+                  <FirstResponseSkeleton />
                 ) : (
                   <div className="message-parts">
                     {message.parts.map((part, index) =>
@@ -597,6 +697,8 @@ export function Chat() {
                             {part.text}
                           </p>
                         ) : null
+                      ) : part.kind === "no-result" ? (
+                        <NoResultCard key={index} />
                       ) : (
                         <ToolLifecycleCard key={part.toolCallId} part={part} />
                       ),
@@ -622,6 +724,7 @@ export function Chat() {
               rows={4}
               disabled={isStreaming && status === "thinking"}
             />
+            {draftHint ? <p className="composer-hint" role="status">{draftHint}</p> : null}
 
             <div className="composer-actions">
               <p className="composer-help">

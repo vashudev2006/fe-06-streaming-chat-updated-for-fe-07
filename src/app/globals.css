@@ -29,6 +29,8 @@ html {
 }
 
 body {
+  min-height: 100dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
     linear-gradient(180deg, #f8f5ef 0%, #eef3f0 100%);
@@ -189,7 +191,7 @@ select {
 .chat-panel {
   display: grid;
   gap: 1rem;
-  min-height: 720px;
+  min-height: min(720px, calc(100dvh - 2rem));
   padding: 1rem;
   border-radius: 24px;
 }
@@ -289,6 +291,7 @@ select {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface-strong);
@@ -328,6 +331,13 @@ select {
 .composer-help {
   font-size: 0.92rem;
   color: var(--muted);
+}
+
+.composer-hint {
+  margin: -0.25rem 0 0;
+  color: #8a6a0c;
+  font-size: 0.88rem;
+  font-weight: 600;
 }
 
 .button-row,
@@ -397,6 +407,78 @@ select {
   border: 1px solid rgba(153, 27, 27, 0.18);
   background: rgba(255, 241, 241, 0.92);
   color: #991b1b;
+}
+
+.state-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.9rem 1rem;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface-strong);
+}
+
+.state-card--error {
+  border-color: rgba(153, 27, 27, 0.22);
+  background: rgba(255, 241, 241, 0.92);
+}
+
+.state-card--empty {
+  display: grid;
+  gap: 0.25rem;
+  border-style: dashed;
+  background: rgba(15, 118, 110, 0.05);
+}
+
+.state-card__title {
+  margin: 0;
+  color: var(--text);
+  font-weight: 800;
+}
+
+.state-card__body {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.retry-button {
+  min-width: 5.5rem;
+  min-height: 2.75rem;
+  flex: none;
+}
+
+.skeleton-card {
+  display: grid;
+  gap: 0.55rem;
+  min-width: min(20rem, 100%);
+  padding: 0.3rem 0;
+}
+
+.skeleton-line {
+  display: block;
+  width: 74%;
+  height: 0.8rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(15, 118, 110, 0.1), rgba(255, 255, 255, 0.7), rgba(15, 118, 110, 0.1));
+  background-size: 220% 100%;
+  animation: shimmer 1.1s linear infinite;
+}
+
+.skeleton-line--wide {
+  width: 92%;
+}
+
+.skeleton-line--short {
+  width: 48%;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -220% 0;
+  }
 }
 
 .demo-card {
@@ -789,11 +871,19 @@ select {
   }
 
   .chat-panel {
-    min-height: 560px;
+    min-height: calc(100dvh - 1rem);
     padding: 0.85rem;
   }
 
   .transcript {
-    max-height: 440px;
+    max-height: min(440px, 48dvh);
+  }
+
+  .state-card {
+    display: grid;
+  }
+
+  .retry-button {
+    width: 100%;
   }
 }

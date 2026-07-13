@@ -45,6 +45,7 @@ type BlockState =
 
 const encoder = new TextEncoder();
 const MAX_TOOL_ROUNDTRIPS = 3;
+const ENABLE_TEST_FAILURES = process.env.NODE_ENV !== "production";
 
 function sse(event: string, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -408,10 +409,34 @@ export async function POST(request: Request) {
   const messages = Array.isArray(body.messages) ? body.messages.slice(-MAX_TURNS) : [];
   const lastUserMessage =
     [...messages].reverse().find((message) => message.role === "user")?.content?.trim() ?? "";
+  const lowerLastUserMessage = lastUserMessage.toLowerCase();
+  const shouldAbortMidStream =
+    ENABLE_TEST_FAILURES && lowerLastUserMessage.includes("trigger network error");
+
+  if (
+    ENABLE_TEST_FAILURES &&
+    lowerLastUserMessage.includes("error") &&
+    !shouldAbortMidStream
+  ) {
+    return Response.json(
+      { error: "Development test trigger: forced chat route failure." },
+      { status: 500 },
+    );
+  }
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const apiKey = process.env.ANTHROPIC_API_KEY;
+
+      if (shouldAbortMidStream) {
+        controller.enqueue(encoder.encode(sse("meta", { mode: "test-failure" })));
+        controller.enqueue(
+          encoder.encode(sse("token", { chunk: "Starting the response before the stream fails." })),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        controller.error(new Error("Development test trigger: simulated mid-stream failure."));
+        return;
+      }
 
       if (!apiKey) {
         controller.enqueue(encoder.encode(sse("meta", { mode: "fallback" })));
