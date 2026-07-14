@@ -45,17 +45,43 @@ select {
   font: inherit;
 }
 
+a {
+  text-underline-offset: 0.18em;
+}
+
 ::selection {
   background: var(--accent);
   color: white;
 }
 
-.hero h1 {
+.skip-link {
+  position: fixed;
+  z-index: 50;
+  top: 1rem;
+  left: 1rem;
+  transform: translateY(-150%);
+  border-radius: 999px;
+  background: var(--surface-dark);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  font-weight: 800;
+  box-shadow: var(--shadow);
+  transition: transform 0.15s ease;
+}
+
+.skip-link:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.hero h1,
+.hero-copy h2 {
   margin: 0;
   max-width: 12ch;
   font-size: clamp(2.5rem, 4.8vw, 4.4rem);
   line-height: 0.94;
-  letter-spacing: -0.04em;
+  letter-spacing: 0;
 }
 
 .hero-copy p,
@@ -385,6 +411,9 @@ select {
 .tab-button:focus-visible,
 .trigger-button:focus-visible,
 .close-button:focus-visible,
+.composer button:focus-visible,
+.rounded-full:focus-visible,
+a:focus-visible,
 .composer textarea:focus-visible {
   outline: 3px solid var(--ring);
   outline-offset: 2px;
@@ -858,7 +887,8 @@ select {
 }
 
 @media (max-width: 640px) {
-  .hero h1 {
+  .hero h1,
+  .hero-copy h2 {
     max-width: 15ch;
   }
 

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Chat } from "@/components/chat";
+import { LazyChat } from "@/components/lazy-chat";
 
 const highlights = [
   {
@@ -65,7 +65,7 @@ export default function Home() {
         </aside>
       </section>
 
-      <Chat />
+      <LazyChat />
     </div>
   );
 }

@@ -634,7 +634,7 @@ export function Chat() {
         <article className="hero-panel">
           <p className="eyebrow">FE-07 / Tool results in the UI</p>
           <div className="hero-copy">
-            <h1>Tool calls that render as real UI, not JSON.</h1>
+            <h2>Tool calls that render as real UI, not JSON.</h2>
             <p>
               The server route calls a typed <code>scoreLead</code> tool, streams every lifecycle
               state back over SSE, and the client renders each state distinctly — including a
@@ -721,6 +721,8 @@ export function Chat() {
             ref={transcriptRef}
             onScroll={handleScroll}
             aria-label="Conversation transcript"
+            aria-live="polite"
+            aria-relevant="additions text"
           >
             {messages.map((message) => (
               <ChatMessageView key={message.id} message={message} />
