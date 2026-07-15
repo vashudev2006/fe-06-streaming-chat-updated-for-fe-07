@@ -46,9 +46,58 @@ type BlockState =
 const encoder = new TextEncoder();
 const MAX_TOOL_ROUNDTRIPS = 3;
 const ENABLE_TEST_FAILURES = process.env.NODE_ENV !== "production";
+const MAX_MESSAGE_CHARS = 4_000;
+const MAX_TOTAL_CHARS = 12_000;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 12;
+const rateLimitBuckets = new Map<string, { count: number; resetAt: number }>();
 
 function sse(event: string, payload: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+function clientIdFromRequest(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwardedFor || request.headers.get("x-real-ip") || "local-preview";
+}
+
+function checkRateLimit(clientId: string) {
+  const now = Date.now();
+  const current = rateLimitBuckets.get(clientId);
+
+  if (!current || current.resetAt <= now) {
+    rateLimitBuckets.set(clientId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return { allowed: true, retryAfterSeconds: 0 };
+  }
+
+  if (current.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return {
+      allowed: false,
+      retryAfterSeconds: Math.max(1, Math.ceil((current.resetAt - now) / 1_000)),
+    };
+  }
+
+  current.count += 1;
+  return { allowed: true, retryAfterSeconds: 0 };
+}
+
+function sanitizeMessages(rawMessages: unknown): ChatMessage[] {
+  if (!Array.isArray(rawMessages)) return [];
+
+  return rawMessages
+    .filter((message): message is ChatMessage => {
+      if (!message || typeof message !== "object") return false;
+      const candidate = message as Partial<ChatMessage>;
+      return (
+        (candidate.role === "user" || candidate.role === "assistant") &&
+        typeof candidate.content === "string"
+      );
+    })
+    .slice(-MAX_TURNS)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.slice(0, MAX_MESSAGE_CHARS),
+    }));
 }
 
 function parseAnthropicEventBlock(block: string) {
@@ -400,13 +449,33 @@ async function streamFallbackTextResponse(
 export async function POST(request: Request) {
   let body: ChatRequestBody;
 
+  const limit = checkRateLimit(clientIdFromRequest(request));
+  if (!limit.allowed) {
+    return Response.json(
+      { error: "Too many chat requests. Please wait a moment and try again." },
+      {
+        status: 429,
+        headers: { "Retry-After": String(limit.retryAfterSeconds) },
+      },
+    );
+  }
+
   try {
     body = (await request.json()) as ChatRequestBody;
   } catch {
     return Response.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const messages = Array.isArray(body.messages) ? body.messages.slice(-MAX_TURNS) : [];
+  const messages = sanitizeMessages(body.messages);
+  const totalChars = messages.reduce((sum, message) => sum + message.content.length, 0);
+
+  if (totalChars > MAX_TOTAL_CHARS) {
+    return Response.json(
+      { error: "This conversation is too large for the preview. Please start a shorter thread." },
+      { status: 413 },
+    );
+  }
+
   const lastUserMessage =
     [...messages].reverse().find((message) => message.role === "user")?.content?.trim() ?? "";
   const lowerLastUserMessage = lastUserMessage.toLowerCase();

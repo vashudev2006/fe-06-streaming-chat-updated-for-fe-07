@@ -4,11 +4,11 @@ import { SiteNav } from "@/components/site-nav";
 
 export const metadata: Metadata = {
   title: {
-    default: "FE-06 Streaming Chat",
-    template: "%s | FE-06 Streaming Chat",
+    default: "FE-11 Production Chat",
+    template: "%s | FE-11 Production Chat",
   },
   description:
-    "A streaming chat playground with a server route, client token rendering, and mobile-friendly conversation UI.",
+    "A production-ready streaming chat preview with server-side model config, abuse guards, and mobile-friendly conversation UI.",
 };
 
 export default function RootLayout({

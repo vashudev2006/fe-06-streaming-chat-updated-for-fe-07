@@ -275,7 +275,7 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
         <div className="tool-card__header">
           <span className="tool-card__spinner" aria-hidden="true" />
           <div>
-            <p className="tool-card__title">Running scoreLead…</p>
+            <p className="tool-card__title">Running scoreLead...</p>
             <p className="tool-card__subtitle">Validating input and scoring the lead.</p>
           </div>
         </div>
@@ -304,7 +304,7 @@ function ToolLifecycleCard({ part }: { part: ToolPart }) {
       <div className="tool-card__header">
         <span className="tool-card__spinner" aria-hidden="true" />
         <div>
-          <p className="tool-card__title">Calling scoreLead…</p>
+          <p className="tool-card__title">Calling scoreLead...</p>
           <p className="tool-card__subtitle">Streaming tool arguments from the model.</p>
         </div>
       </div>
@@ -632,13 +632,14 @@ export function Chat() {
     <section className="chat-section" id="chat">
       <div className="hero-grid">
         <article className="hero-panel">
-          <p className="eyebrow">FE-07 / Tool results in the UI</p>
+          <p className="eyebrow">FE-11 / Production deployment and README</p>
           <div className="hero-copy">
             <h2>Tool calls that render as real UI, not JSON.</h2>
             <p>
               The server route calls a typed <code>scoreLead</code> tool, streams every lifecycle
               state back over SSE, and the client renders each state distinctly — including a
-              designed failure state instead of a crash.
+              designed failure state instead of a crash. The public route also
+              caps request volume and prompt size before it reaches the model.
             </p>
           </div>
           <div className="hero-card">
@@ -652,7 +653,7 @@ export function Chat() {
             <div className="hero-stat">
               <div>
                 <strong>Tool lifecycle</strong>
-                <span className="chat-meta">input-streaming → input-available → output.</span>
+                <span className="chat-meta">input-streaming to input-available to output.</span>
               </div>
               <span className="badge">4 states</span>
             </div>
@@ -662,6 +663,13 @@ export function Chat() {
                 <span className="chat-meta">History stays intact across multiple turns.</span>
               </div>
               <span className="badge">{conversationCount} turns</span>
+            </div>
+            <div className="hero-stat">
+              <div>
+                <strong>Production hygiene</strong>
+                <span className="chat-meta">Server-only API key, rate cap, and input limits.</span>
+              </div>
+              <span className="badge">FE-11</span>
             </div>
           </div>
         </article>

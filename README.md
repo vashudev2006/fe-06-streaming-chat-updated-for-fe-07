@@ -1,93 +1,147 @@
-# FE-07 Tool Results and Structured Output
+# FE-11 Production Streaming Chat
 
-This repo builds on the FE-06 streaming chat and adds a server-side tool
-call rendered as real UI: a `scoreLead` tool that scores a sales lead from
-a name, company, and budget, streamed through its full lifecycle
-(input-streaming → input-available → output-available / output-error) and
-rendered as a score-card component instead of raw JSON.
+Production-ready version of the FE-06/FE-07 streaming chat assignment. The app
+streams assistant text over Server-Sent Events, preserves chat history in React
+state, renders the `scoreLead` tool lifecycle as real UI, and adds the README
+and production hygiene needed for a public review link.
 
-## What lives here
+## Live Preview
 
-- `src/lib/tools/score-lead.ts` — the tool contract: Zod input schema,
-  the Anthropic tool definition, and the `execute` function
-- `src/app/api/chat/route.ts` — the server route: streams Anthropic's
-  native `tool_use` blocks, runs the tool the moment its input finishes
-  streaming, and forwards each lifecycle state to the client over SSE;
-  also runs a real (non-mocked) fallback demo when no API key is set
-- `src/components/chat.tsx` — the client: tracks each assistant message
-  as an ordered list of text/tool parts and renders each tool state
-  distinctly
-- `src/components/lead-score-card.tsx` — the real component rendered for
-  a successful `scoreLead` result (gauge, tier badge, reasons)
-- `src/lib/chat-config.ts` — shared model/system-prompt config, updated
-  so the model knows when to call the tool
-- `NOTES.md` — submission write-up
+Add the deployed URL here before submission:
 
-## Tool contract: `scoreLead`
-
-**Name:** `scoreLead`
-
-**Input schema (Zod, `scoreLeadInputSchema`):**
-
-```ts
-{
-  name: string;     // 1-120 chars, the lead's full name
-  company: string;  // 1-160 chars, the lead's company
-  budget: number;   // finite, >= 0, USD
-}
+```text
+https://your-vercel-project.vercel.app
 ```
 
-**Return shape (`ScoreLeadOutput`):**
+## What It Does
 
-```ts
-{
-  score: number;                     // integer, 0-100
-  tier: "cold" | "warm" | "hot";     // score >= 70 hot, >= 40 warm, else cold
-  reasons: string[];                 // human-readable factors behind the score
-}
-```
+- Streams assistant responses token by token from a Next.js route handler.
+- Keeps `ANTHROPIC_API_KEY` server-side only.
+- Stores the model choice, system prompt, and chat limits in
+  `src/lib/chat-config.ts`.
+- Preserves the full visible conversation across turns in React state.
+- Supports a typed `scoreLead` tool that shows:
+  - `input-streaming`
+  - `input-available`
+  - `output-available`
+  - `output-error`
+- Falls back to a local demo stream when no Anthropic key is configured, so
+  reviewers can still test the UI without secrets.
+- Adds basic production safeguards: per-IP request caps and prompt-size limits.
 
-**Behavior:** `scoreLead(rawInput)` validates `rawInput` against
-`scoreLeadInputSchema` with `.parse()` — a Zod validation failure (missing
-field, negative budget, wrong type) throws a `ZodError`, which the route
-turns into an `output-error` tool part instead of crashing the request. A
-second, business-rule error (`LeadScoringError`) is thrown for
-implausible budgets (> $50M) to demonstrate a non-schema failure path
-too. On success it returns a deterministic score built from budget size,
-whether the company name looks registered, and whether a full name was
-given.
-
-**Where it's wired up:**
-- Anthropic side: `toAnthropicToolDefinition()` in `score-lead.ts`
-  produces the JSON Schema handed to the Messages API's `tools` param.
-- Execution: `route.ts` parses the streamed `input_json_delta` chunks,
-  and calls `scoreLead()` as soon as the `tool_use` block closes.
-- Client: `chat.tsx` renders `input-streaming` (raw JSON streaming in),
-  `input-available` (parsed input, tool running), `output-available`
-  (real `LeadScoreCard` component), and `output-error` (dedicated error
-  card) as visually distinct states.
-
-## Local preview
+## Run Locally
 
 ```bash
+npm install
 npm run dev
 ```
 
-Then open the local URL Next.js prints in the terminal and try:
+Open the local URL printed by Next.js, usually:
 
-- *"Score a lead named Priya Anand at Meridian Robotics with a $120k budget."*
-  to see the full success path.
-- *"Score a lead named Sam at Acme with a budget of -5000."* to see the
-  designed `output-error` state.
-
-## Environment
-
-If you want the route to proxy Anthropic instead of the fallback demo, set:
-
-```bash
-ANTHROPIC_API_KEY=your_key_here
+```text
+http://localhost:3000
 ```
 
-The key stays server-side only. Without it, the route still runs the real
-`scoreLead` function against a heuristically-extracted lead so the tool
-lifecycle is demoable without secrets.
+Try these prompts:
+
+```text
+Score a lead named Priya Anand at Meridian Robotics with a $120k budget.
+Score a lead named Sam at Acme with a budget of -5000.
+Explain how the server route differs from the client component.
+```
+
+## Environment Variables
+
+| Name | Required | Used In | Description |
+| --- | --- | --- | --- |
+| `ANTHROPIC_API_KEY` | Optional locally, required for real production model calls | `src/app/api/chat/route.ts` | Server-only Anthropic API key. Never expose this with `NEXT_PUBLIC_`. |
+| `ANTHROPIC_MODEL` | Optional | `src/lib/chat-config.ts` | Overrides the default model. Defaults to `claude-3-5-sonnet-latest`. |
+
+Without `ANTHROPIC_API_KEY`, `/api/chat` runs fallback mode. That mode still
+streams SSE events and executes the real `scoreLead` function for lead-scoring
+prompts, but it does not call Anthropic.
+
+## Architecture
+
+```text
+Browser
+  -> src/components/chat.tsx
+     - owns transcript state
+     - sends prior user/assistant messages to /api/chat
+     - reads SSE events incrementally
+     - renders token text and tool cards
+
+Next.js server
+  -> src/app/api/chat/route.ts
+     - validates and trims incoming messages
+     - applies request and prompt-size limits
+     - reads ANTHROPIC_API_KEY only on the server
+     - calls Anthropic Messages API when configured
+     - streams token/tool lifecycle events back to the browser
+
+Shared config
+  -> src/lib/chat-config.ts
+     - model selection
+     - system prompt
+     - retained turn count
+
+Tool contract
+  -> src/lib/tools/score-lead.ts
+     - Zod input schema
+     - Anthropic tool definition
+     - deterministic server-side tool execution
+```
+
+## Production Hygiene
+
+- **Secret handling:** API key access stays inside the route handler. The client
+  only calls `/api/chat`.
+- **Rate limiting:** The route allows 12 requests per client IP per minute in
+  the current server instance.
+- **Input limits:** Each message is capped at 4,000 characters and each request
+  is capped at 12,000 total characters.
+- **History limits:** The server only forwards the most recent `MAX_TURNS`
+  messages from `src/lib/chat-config.ts`.
+- **Failure states:** API errors, malformed tool input, validation failures, and
+  mid-stream failures render as visible UI states instead of blank output.
+
+The in-memory rate limiter is enough for this assignment preview. For a
+multi-instance production deployment, replace it with a shared store such as
+Upstash Redis, Vercel KV, or another edge-safe rate limiter.
+
+## Deploy To Vercel
+
+1. Push the repo to GitHub.
+2. Import the project in Vercel.
+3. Add `ANTHROPIC_API_KEY` in Vercel Project Settings -> Environment Variables.
+4. Deploy.
+5. Open the deployment URL and test desktop and mobile widths.
+6. Add the production URL to the Live Preview section above and submit it.
+
+## Verification
+
+Run the automated checks:
+
+```bash
+npm run lint
+npm run test:run
+npm run build
+npm run test:e2e
+```
+
+Manual preview checklist:
+
+- Desktop width loads without console errors.
+- Mobile width keeps the transcript, composer, and tool cards readable.
+- A normal prompt streams text.
+- A valid lead prompt renders a `LeadScoreCard`.
+- A negative-budget lead prompt renders the tool error card.
+- `/health` returns JSON with `ok: true`.
+
+## AI Tools Used
+
+AI assistance was used to plan the FE-11 production pass, inspect the existing
+Next.js implementation, add the route safeguards, update reviewer-facing copy,
+and draft this README. The implementation was verified through local linting,
+tests, build checks, and browser preview checks rather than relying on AI output
+alone.

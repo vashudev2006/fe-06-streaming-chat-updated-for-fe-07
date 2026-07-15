@@ -22,15 +22,16 @@ export default function Home() {
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-[32px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[0_24px_60px_rgba(19,32,38,0.06)] sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.34em] text-[var(--muted)]">
-            Assignment FE-06
+            Assignment FE-11
           </p>
           <h1 className="mt-4 max-w-2xl text-4xl font-semibold tracking-[-0.04em] text-[var(--text)] sm:text-5xl">
-            Streaming chat that feels live, not bolted on.
+            Production streaming chat, ready for review.
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)] sm:text-lg">
-            This preview keeps the secret model config on the server, streams
-            assistant tokens as they arrive, and preserves the full conversation
-            across turns so reviewers can test the state flow end to end.
+            This preview keeps the model config and API key server-side, streams
+            assistant tokens and tool results as they arrive, preserves the full
+            conversation across turns, and adds small production guardrails for
+            public review.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
